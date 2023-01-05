@@ -14,7 +14,7 @@
                 <tr>
                     <td>{{ url.id }}</td>
                     <td><a href="{{ url_for('get_url', id=url.id) }}">{{ url.name }}</a></td>
-                    <td></td>
+                    <td>{% if url.created_at %}{{ url.created_at.strftime('%Y-%m-%d %H:%M:%S')}}{% endif %}</td>
                     <td></td>
                 </tr>
                 {% endfor %}

@@ -43,7 +43,7 @@ def add_url():
         else:
             cursor.execute(
                 "INSERT INTO urls (name, created_at) VALUES (%s, %s);",
-                (normalized_url, datetime.datetime.now().strftime('%Y-%m-%d'))
+                (normalized_url, datetime.datetime.now())
             )
             cursor.execute("SELECT * FROM urls WHERE name=%s;", (normalized_url,))
             added_url = cursor.fetchone()
@@ -60,9 +60,12 @@ def get_url(id):
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
         url = cursor.fetchone()
+        cursor.execute("SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;", (id,))
+        checks = cursor.fetchall()
     return render_template(
         'url.html',
         url=url,
+        checks=checks,
         messages=messages
     )
 
@@ -71,7 +74,16 @@ def get_url(id):
 def get_urls():
     connection = db_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute("SELECT * FROM urls ORDER BY id DESC;")
+        cursor.execute(
+            '''
+            SELECT DISTINCT ON (result_query.id) * FROM (
+                SELECT urls.id, name, url_checks.created_at, status_code FROM url_checks 
+                RIGHT JOIN urls ON url_checks.url_id = urls.id      
+                ORDER BY urls.id DESC, url_checks.created_at DESC
+            ) as result_query
+            ORDER BY result_query.id DESC;
+            '''
+        )
         all_urls = cursor.fetchall()
     connection.close()
     messages = get_flashed_messages(with_categories=True)
@@ -80,6 +92,18 @@ def get_urls():
         urls=all_urls,
         messages=messages
     )
+
+
+@app.post('/urls/<int:id>/checks')
+def check_url(id):
+    connection = db_connect()
+    with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
+        cursor.execute(
+            "INSERT INTO url_checks (url_id, created_at) VALUES (%s, %s);",
+            (id, datetime.datetime.now())
+        )
+    connection.close()
+    return redirect(url_for('get_url', id=id), 302)
 
 
 def db_connect():
@@ -98,4 +122,3 @@ def normalize(url):
 
 if __name__ == "__main__":
     app.run()
-
