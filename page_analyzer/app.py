@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect, flash, get_flashed_messages, url_for
+from flask import Flask, render_template, request, redirect, flash, get_flashed_messages, url_for, abort
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 from psycopg2.extras import NamedTupleCursor
@@ -62,6 +62,8 @@ def get_url(id):
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
         url = cursor.fetchone()
+        if not url:
+            abort(404)
         cursor.execute("SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;", (id,))
         checks = cursor.fetchall()
     return render_template(
@@ -117,6 +119,11 @@ def check_url(id):
             flash('Страница успешно проверена', 'success')
     connection.close()
     return redirect(url_for('get_url', id=id), 302)
+
+
+@app.errorhandler(404)
+def page_not_found(error):
+    return render_template('404.html'), 404
 
 
 def db_connect():
