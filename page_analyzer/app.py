@@ -17,14 +17,12 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 @app.route('/')
 def index():
-    messages = get_flashed_messages(with_categories=True)
     return render_template(
-        'index.html',
-        messages=messages
+        'index.html'
     )
 
 
-@app.post('/')
+@app.post('/urls')
 def add_url():
     url = request.form.to_dict()['url']
     if not validators.url(url):
@@ -33,7 +31,7 @@ def add_url():
             flash('URL обязателен', 'danger')
         elif not validators.length(url, max=255):
             flash('URL превышает 255 символов', 'danger')
-        return redirect(url_for('index'), 302)
+        return render_template('index.html', url=url), 422
     normalized_url = normalize(url)
     connection = db_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
@@ -57,7 +55,6 @@ def add_url():
 
 @app.route('/urls/<int:id>')
 def get_url(id):
-    messages = get_flashed_messages(with_categories=True)
     connection = db_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
@@ -69,8 +66,7 @@ def get_url(id):
     return render_template(
         'url.html',
         url=url,
-        checks=checks,
-        messages=messages
+        checks=checks
     )
 
 
@@ -90,11 +86,9 @@ def get_urls():
         )
         all_urls = cursor.fetchall()
     connection.close()
-    messages = get_flashed_messages(with_categories=True)
     return render_template(
         'urls.html',
-        urls=all_urls,
-        messages=messages
+        urls=all_urls
     )
 
 
