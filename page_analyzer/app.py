@@ -1,4 +1,11 @@
-from flask import Flask, render_template, request, redirect, flash, get_flashed_messages, url_for, abort
+from flask import (
+    Flask,
+    render_template,
+    request,
+    redirect,
+    flash,
+    url_for,
+    abort)
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 from psycopg2.extras import NamedTupleCursor
@@ -35,7 +42,10 @@ def add_url():
     normalized_url = normalize(url)
     connection = db_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute("SELECT * FROM urls WHERE name=%s;", (normalized_url, ))
+        cursor.execute(
+            "SELECT * FROM urls WHERE name=%s;",
+            (normalized_url, )
+        )
         existed_url = cursor.fetchone()
         if existed_url:
             flash('Страница уже существует', 'info')
@@ -45,7 +55,10 @@ def add_url():
                 "INSERT INTO urls (name, created_at) VALUES (%s, %s);",
                 (normalized_url, datetime.datetime.now())
             )
-            cursor.execute("SELECT * FROM urls WHERE name=%s;", (normalized_url,))
+            cursor.execute(
+                "SELECT * FROM urls WHERE name=%s;",
+                (normalized_url,)
+            )
             added_url = cursor.fetchone()
             current_id = added_url.id
             flash('Страница успешно добавлена', 'success')
@@ -61,7 +74,10 @@ def get_url(id):
         url = cursor.fetchone()
         if not url:
             abort(404)
-        cursor.execute("SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;", (id,))
+        cursor.execute(
+            "SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;",
+            (id,)
+        )
         checks = cursor.fetchall()
     return render_template(
         'url.html',
@@ -77,8 +93,9 @@ def get_urls():
         cursor.execute(
             '''
             SELECT DISTINCT ON (result_query.id) * FROM (
-                SELECT urls.id, name, url_checks.created_at, status_code FROM url_checks 
-                RIGHT JOIN urls ON url_checks.url_id = urls.id      
+                SELECT urls.id, name, url_checks.created_at, status_code
+                FROM url_checks
+                RIGHT JOIN urls ON url_checks.url_id = urls.id
                 ORDER BY urls.id DESC, url_checks.created_at DESC
             ) as result_query
             ORDER BY result_query.id DESC;
@@ -103,13 +120,21 @@ def check_url(id):
             flash('Произошла ошибка при проверке', 'danger')
         else:
             page_content = get_url_content(response)
-            cursor.execute('''
-                            INSERT INTO url_checks 
-                            (url_id, created_at, status_code, h1, title, description) 
-                            VALUES (%s, %s, %s, %s, %s, %s);
-                            ''',
-                           (id, datetime.datetime.now(), response.status_code,
-                            page_content['h1'], page_content['title'], page_content['description']))
+            cursor.execute(
+                '''
+                INSERT INTO url_checks
+                (url_id, created_at, status_code, h1, title, description)
+                VALUES (%s, %s, %s, %s, %s, %s);
+                ''',
+                (
+                    id,
+                    datetime.datetime.now(),
+                    response.status_code,
+                    page_content['h1'],
+                    page_content['title'],
+                    page_content['description']
+                )
+            )
             flash('Страница успешно проверена', 'success')
     connection.close()
     return redirect(url_for('get_url', id=id), 302)
@@ -138,22 +163,22 @@ def http_request(url):
 
 
 def get_url_content(response):
-    content = {
+    data = {
         'h1': '',
         'title': '',
         'description': ''
     }
     page = BeautifulSoup(response.text, 'html.parser')
     if page.find('h1'):
-        content['h1'] = page.find('h1').text
+        data['h1'] = page.find('h1').text
     if page.find('title'):
-        content['title'] = page.find('title').text
-    if page.find('meta', attrs={'name': 'description'}):
-        content['description'] = page.find('meta', attrs={'name': 'description'})['content']
-    return content
+        data['title'] = page.find('title').text
+    description = page.find('meta', attrs={'name': 'description'})
+    if description:
+        data['description'] = description['content']
+    return data
 
 
 def normalize(url):
     url = urlparse(url)
     return f'{url.scheme}://{url.netloc}'
-
