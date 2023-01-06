@@ -4,20 +4,8 @@ install:
 build:
 	poetry build
 
-publish:
-	poetry publish --dry-run
-
-package-install:
-	python3 -m pip install --user dist/*.whl
-
 lint:
-	poetry run flake8 page_loader
-
-tests:
-	poetry run pytest
-
-coverage:
-	poetry run pytest --cov=page_loader tests/ --cov-report xml
+	poetry run flake8 page_analyzer
 
 dev:
 	poetry run flask --app page_analyzer:app run

@@ -2,10 +2,12 @@ from flask import Flask, render_template, request, redirect, flash, get_flashed_
 from dotenv import load_dotenv
 from urllib.parse import urlparse
 from psycopg2.extras import NamedTupleCursor
+from bs4 import BeautifulSoup
 import os
 import psycopg2
 import datetime
 import validators
+import requests
 
 app = Flask(__name__)
 load_dotenv()
@@ -98,10 +100,21 @@ def get_urls():
 def check_url(id):
     connection = db_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute(
-            "INSERT INTO url_checks (url_id, created_at) VALUES (%s, %s);",
-            (id, datetime.datetime.now())
-        )
+        cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
+        url = cursor.fetchone()
+        response = http_request(url.name)
+        if not response:
+            flash('Произошла ошибка при проверке', 'danger')
+        else:
+            page_content = get_url_content(response)
+            cursor.execute('''
+                            INSERT INTO url_checks 
+                            (url_id, created_at, status_code, h1, title, description) 
+                            VALUES (%s, %s, %s, %s, %s, %s);
+                            ''',
+                           (id, datetime.datetime.now(), response.status_code,
+                            page_content['h1'], page_content['title'], page_content['description']))
+            flash('Страница успешно проверена', 'success')
     connection.close()
     return redirect(url_for('get_url', id=id), 302)
 
@@ -111,14 +124,35 @@ def db_connect():
         connection = psycopg2.connect(DATABASE_URL)
         connection.autocommit = True
         return connection
-    except:
+    except requests.exceptions.ConnectionError:
         return False
+
+
+def http_request(url):
+    try:
+        response = requests.get(url)
+        return response
+    except requests.exceptions.ConnectionError:
+        return False
+
+
+def get_url_content(response):
+    content = {
+        'h1': '',
+        'title': '',
+        'description': ''
+    }
+    page = BeautifulSoup(response.text, 'html.parser')
+    if page.find('h1'):
+        content['h1'] = page.find('h1').text
+    if page.find('title'):
+        content['title'] = page.find('title').text
+    if page.find('meta', attrs={'name': 'description'}):
+        content['description'] = page.find('meta', attrs={'name': 'description'})['content']
+    return content
 
 
 def normalize(url):
     url = urlparse(url)
     return f'{url.scheme}://{url.netloc}'
 
-
-if __name__ == "__main__":
-    app.run()

@@ -41,10 +41,10 @@
                 {% for check in checks %}
                 <tr>
                     <td>{{ check.id }}</td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
-                    <td></td>
+                    <td>{{ check.status_code|default('', true) }}</td>
+                    <td>{{ check.h1|default('', true) }}</td>
+                    <td>{{ check.title|default('', true) }}</td>
+                    <td>{{ check.description|default('', true) }}</td>
                     <td>{{ check.created_at.strftime('%Y-%m-%d %H:%M:%S') }}</td>
                 </tr>
                 {% endfor %}
