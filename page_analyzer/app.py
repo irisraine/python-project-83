@@ -104,7 +104,7 @@ def check_url(id):
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
         url = cursor.fetchone()
-        if not validators.url(url):
+        if not validators.url(url.name):
             flash('Произошла ошибка при проверке', 'danger')
         response = http_request(url.name)
         if not response:
