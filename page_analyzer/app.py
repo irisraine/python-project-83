@@ -36,13 +36,10 @@ def get_urls():
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute(
             '''
-            SELECT DISTINCT ON (result_query.id) * FROM (
-                SELECT urls.id, name, url_checks.created_at, status_code
-                FROM url_checks
-                RIGHT JOIN urls ON url_checks.url_id = urls.id
-                ORDER BY urls.id DESC, url_checks.created_at DESC
-            ) as result_query
-            ORDER BY result_query.id DESC;
+            SELECT DISTINCT ON (urls.id) 
+                urls.id, name, url_checks.created_at, status_code
+            FROM url_checks RIGHT JOIN urls ON url_checks.url_id = urls.id
+            ORDER BY urls.id DESC, url_checks.created_at DESC;
             '''
         )
         urls = cursor.fetchall()
