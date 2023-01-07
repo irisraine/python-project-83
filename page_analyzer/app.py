@@ -25,9 +25,7 @@ DATABASE_URL = os.getenv('DATABASE_URL')
 
 @app.route('/')
 def index():
-    return render_template(
-        'index.html'
-    )
+    return render_template('index.html')
 
 
 @app.route('/urls')
@@ -36,7 +34,7 @@ def get_urls():
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute(
             '''
-            SELECT DISTINCT ON (urls.id) 
+            SELECT DISTINCT ON (urls.id)
                 urls.id, name, url_checks.created_at, status_code
             FROM url_checks RIGHT JOIN urls ON url_checks.url_id = urls.id
             ORDER BY urls.id DESC, url_checks.created_at DESC;
@@ -44,10 +42,7 @@ def get_urls():
         )
         urls = cursor.fetchall()
     connection.close()
-    return render_template(
-        'urls.html',
-        urls=urls
-    )
+    return render_template('urls.html', urls=urls)
 
 
 @app.route('/urls/<int:id>')
@@ -67,11 +62,7 @@ def get_url(id):
         )
         checks = cursor.fetchall()
     connection.close()
-    return render_template(
-        'url.html',
-        url=url,
-        checks=checks
-    )
+    return render_template('url.html', url=url, checks=checks)
 
 
 @app.post('/urls')
@@ -83,9 +74,7 @@ def add_url():
             flash('URL обязателен', 'danger')
         elif not validators.length(url, max=255):
             flash('URL превышает 255 символов', 'danger')
-        return render_template(
-            'index.html',
-            url=url), 422
+        return render_template('index.html', url=url), 422
     normalized_url = normalize(url)
     connection = database_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
