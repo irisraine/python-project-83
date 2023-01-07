@@ -17,6 +17,7 @@ import validators
 import requests
 
 app = Flask(__name__)
+
 load_dotenv()
 app.config['SECRET_KEY'] = os.getenv('SECRET_KEY')
 DATABASE_URL = os.getenv('DATABASE_URL')
@@ -29,6 +30,53 @@ def index():
     )
 
 
+@app.route('/urls')
+def get_urls():
+    connection = database_connect()
+    with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
+        cursor.execute(
+            '''
+            SELECT DISTINCT ON (result_query.id) * FROM (
+                SELECT urls.id, name, url_checks.created_at, status_code
+                FROM url_checks
+                RIGHT JOIN urls ON url_checks.url_id = urls.id
+                ORDER BY urls.id DESC, url_checks.created_at DESC
+            ) as result_query
+            ORDER BY result_query.id DESC;
+            '''
+        )
+        urls = cursor.fetchall()
+    connection.close()
+    return render_template(
+        'urls.html',
+        urls=urls
+    )
+
+
+@app.route('/urls/<int:id>')
+def get_url(id):
+    connection = database_connect()
+    with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
+        cursor.execute(
+            "SELECT * FROM urls WHERE id=%s;",
+            (id, )
+        )
+        url = cursor.fetchone()
+        if not url:
+            abort(404)
+        cursor.execute(
+            "SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;",
+            (id, )
+        )
+        checks = cursor.fetchall()
+    connection.close()
+    return render_template(
+        'url.html',
+        url=url,
+        checks=checks
+    )
+
+
 @app.post('/urls')
 def add_url():
     url = request.form.to_dict()['url']
@@ -38,9 +86,11 @@ def add_url():
             flash('URL обязателен', 'danger')
         elif not validators.length(url, max=255):
             flash('URL превышает 255 символов', 'danger')
-        return render_template('index.html', url=url), 422
+        return render_template(
+            'index.html',
+            url=url), 422
     normalized_url = normalize(url)
-    connection = db_connect()
+    connection = database_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
         cursor.execute(
             "SELECT * FROM urls WHERE name=%s;",
@@ -57,7 +107,7 @@ def add_url():
             )
             cursor.execute(
                 "SELECT * FROM urls WHERE name=%s;",
-                (normalized_url,)
+                (normalized_url, )
             )
             added_url = cursor.fetchone()
             current_id = added_url.id
@@ -66,60 +116,19 @@ def add_url():
     return redirect(url_for('get_url', id=current_id), 302)
 
 
-@app.route('/urls/<int:id>')
-def get_url(id):
-    connection = db_connect()
-    with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
-        url = cursor.fetchone()
-        if not url:
-            abort(404)
-        cursor.execute(
-            "SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;",
-            (id,)
-        )
-        checks = cursor.fetchall()
-    return render_template(
-        'url.html',
-        url=url,
-        checks=checks
-    )
-
-
-@app.route('/urls')
-def get_urls():
-    connection = db_connect()
-    with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute(
-            '''
-            SELECT DISTINCT ON (result_query.id) * FROM (
-                SELECT urls.id, name, url_checks.created_at, status_code
-                FROM url_checks
-                RIGHT JOIN urls ON url_checks.url_id = urls.id
-                ORDER BY urls.id DESC, url_checks.created_at DESC
-            ) as result_query
-            ORDER BY result_query.id DESC;
-            '''
-        )
-        all_urls = cursor.fetchall()
-    connection.close()
-    return render_template(
-        'urls.html',
-        urls=all_urls
-    )
-
-
 @app.post('/urls/<int:id>/checks')
 def check_url(id):
-    connection = db_connect()
+    connection = database_connect()
     with connection.cursor(cursor_factory=NamedTupleCursor) as cursor:
-        cursor.execute("SELECT * FROM urls WHERE id=%s;", (id, ))
+        cursor.execute(
+            "SELECT * FROM urls WHERE id=%s;",
+            (id, )
+        )
         url = cursor.fetchone()
-        response = http_request(url.name)
-        if not response:
+        site_content = get_site_content(url.name)
+        if not site_content:
             flash('Произошла ошибка при проверке', 'danger')
         else:
-            page_content = get_url_content(response)
             cursor.execute(
                 '''
                 INSERT INTO url_checks
@@ -129,10 +138,10 @@ def check_url(id):
                 (
                     id,
                     datetime.datetime.now(),
-                    response.status_code,
-                    page_content['h1'],
-                    page_content['title'],
-                    page_content['description']
+                    site_content['status_code'],
+                    site_content['h1'],
+                    site_content['title'],
+                    site_content['description']
                 )
             )
             flash('Страница успешно проверена', 'success')
@@ -145,40 +154,42 @@ def page_not_found(error):
     return render_template('404.html'), 404
 
 
-def db_connect():
+@app.template_filter()
+def format_timestamp(datetime):
+    return datetime.strftime('%Y-%m-%d %H:%M:%S') if datetime else ''
+
+
+def database_connect():
     try:
         connection = psycopg2.connect(DATABASE_URL)
         connection.autocommit = True
         return connection
-    except requests.exceptions.ConnectionError:
+    except psycopg2.DatabaseError or psycopg2.OperationalError:
         return False
-
-
-def http_request(url):
-    try:
-        response = requests.get(url)
-        return response
-    except requests.exceptions.ConnectionError:
-        return False
-
-
-def get_url_content(response):
-    data = {
-        'h1': '',
-        'title': '',
-        'description': ''
-    }
-    page = BeautifulSoup(response.text, 'html.parser')
-    if page.find('h1'):
-        data['h1'] = page.find('h1').text
-    if page.find('title'):
-        data['title'] = page.find('title').text
-    description = page.find('meta', attrs={'name': 'description'})
-    if description:
-        data['description'] = description['content']
-    return data
 
 
 def normalize(url):
     url = urlparse(url)
     return f'{url.scheme}://{url.netloc}'
+
+
+def get_site_content(url):
+    try:
+        response = requests.get(url)
+        response.raise_for_status()
+        site_content = {
+            'status_code': response.status_code,
+            'h1': '',
+            'title': '',
+            'description': ''}
+        page = BeautifulSoup(response.text, 'html.parser')
+        if page.find('h1'):
+            site_content['h1'] = page.find('h1').text
+        if page.find('title'):
+            site_content['title'] = page.find('title').text
+        description = page.find('meta', attrs={'name': 'description'})
+        if description:
+            site_content['description'] = description['content']
+        return site_content
+    except requests.exceptions.RequestException:
+        return False
