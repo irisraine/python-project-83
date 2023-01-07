@@ -163,19 +163,18 @@ def get_site_content(url):
     try:
         response = requests.get(url)
         response.raise_for_status()
-        site_content = {
-            'status_code': response.status_code,
-            'h1': '',
-            'title': '',
-            'description': ''}
         page = BeautifulSoup(response.text, 'html.parser')
-        if page.find('h1'):
-            site_content['h1'] = page.find('h1').text
-        if page.find('title'):
-            site_content['title'] = page.find('title').text
         description = page.find('meta', attrs={'name': 'description'})
-        if description:
-            site_content['description'] = description['content']
+        site_content = {
+            'status_code':
+                response.status_code,
+            'h1':
+                page.find('h1').text if page.find('h1') else '',
+            'title':
+                page.find('title').text if page.find('title') else '',
+            'description':
+                description['content'] if description else ''
+        }
         return site_content
     except requests.exceptions.RequestException:
         return False
