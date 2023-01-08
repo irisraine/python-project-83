@@ -55,7 +55,7 @@ def get_url(id):
         )
         url = cursor.fetchone()
         if not url:
-            abort(404)
+            abort(404, description='Страница не найдена', response=404)
         cursor.execute(
             "SELECT * FROM url_checks WHERE url_id=%s ORDER BY id DESC;",
             (id, )
@@ -135,9 +135,13 @@ def check_url(id):
     return redirect(url_for('get_url', id=id), 302)
 
 
+@app.errorhandler(503)
 @app.errorhandler(404)
-def page_not_found(error):
-    return render_template('404.html'), 404
+def resource_not_found(error):
+    return render_template(
+        'error.html',
+        error_message=error.description
+    ), error.response
 
 
 @app.template_filter()
@@ -151,7 +155,7 @@ def database_connect():
         connection.autocommit = True
         return connection
     except psycopg2.DatabaseError or psycopg2.OperationalError:
-        return False
+        abort(503, description='Ошибка доступа к базе данных', response=503)
 
 
 def normalize(url):
